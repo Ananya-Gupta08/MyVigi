@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import QRScanner from './components/QRScanner'
 import './App.css'
 
 const STORAGE_KEY = 'myvigi_users_v1'
@@ -10,7 +11,7 @@ function AppLayout({ children }) {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">MyVigi Auth</div>
+        <div className="brand">MyVigi</div>
         <nav>
           <Link to="/">Home</Link>
           <Link to="/login">Login</Link>
@@ -35,12 +36,21 @@ function GuardPatrol({ onLog }) {
   const [location, setLocation] = useState('Gate A')
   const [logs, setLogs] = useState([])
   const [status, setStatus] = useState('Ready')
+  const [showScanner, setShowScanner] = useState(false)
 
   const submit = () => {
     const entry = `${new Date().toLocaleTimeString()}: checked ${location}`
     setLogs((prev) => [entry, ...prev])
     setStatus('Patrol logged')
     onLog(entry)
+  }
+
+  const handleScan = (scannedValue) => {
+    const entry = `${new Date().toLocaleTimeString()}: scanned ${scannedValue}`
+    setLogs((prev) => [entry, ...prev])
+    setStatus('Patrol scanned')
+    onLog(entry)
+    setShowScanner(false)
   }
 
   return (
@@ -53,8 +63,12 @@ function GuardPatrol({ onLog }) {
           <option>Gate B</option>
           <option>Zone C</option>
         </select>
-        <button type="button" className="btn-primary" onClick={submit}>Log Patrol</button>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button type="button" className="btn-primary" onClick={submit}>Log Patrol</button>
+          <button type="button" className="btn-secondary" onClick={() => setShowScanner(true)}>Scan QR Patrol</button>
+        </div>
       </div>
+      {showScanner && <div className="card" style={{ marginTop: '14px', padding: '12px' }}><QRScanner onScan={handleScan} /></div>}
       <p>{status}</p>
       <div className="panel-row">
         {logs.slice(0, 4).map((l, i) => <div key={i} className="panel">{l}</div>)}
