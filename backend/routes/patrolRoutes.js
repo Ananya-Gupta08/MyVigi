@@ -1,8 +1,8 @@
 const express = require('express')
 const router = express.Router()
+const authMiddleware = require('../middleware/authMiddleware')
+const { scanCheckpoint } = require('../controllers/patrolController')
 
-router.get('/', (req, res) => {
-  res.json({ message: 'Patroling routes placeholder' })
-})
+router.post('/scan', authMiddleware, scanCheckpoint)
 
 module.exports = router
