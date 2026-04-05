@@ -1,17 +1,20 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
+const express = require('express')
+const cors = require('cors')
 
-const app = express();
+const app = express()
+const PORT = process.env.PORT || 5000
 
-app.use(cors());
-app.use(express.json());
+app.use(cors())
+app.use(express.json())
 
-mongoose.connect("mongodb://127.0.0.1:27017/vigi");
+const apiRoutes = require('./routes/patrolRoutes')
+app.use('/api', apiRoutes)
 
-const patrolRoutes = require("./routes/patrolRoutes");
-app.use("/api/patrol", patrolRoutes);
+// TODO: add more API routes as project requirements are defined
+app.get('/', (req, res) => {
+  res.send('MERN backend is running')
+})
 
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
-});
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
+})

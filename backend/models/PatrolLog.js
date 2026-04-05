@@ -1,13 +1,8 @@
-const mongoose = require("mongoose");
+// Placeholder model file for backend data schemas
+// Define Mongoose models here when the MongoDB schema is ready.
 
-const patrolSchema = new mongoose.Schema({
-  guardId: String,
-  locationId: String,
-  status: String,
-  timestamp: {
-    type: Date,
-    default: Date.now,
-  },
-});
+const mongoose = require('mongoose')
 
-module.exports = mongoose.model("PatrolLog", patrolSchema);
+const placeholderSchema = new mongoose.Schema({}, { strict: false })
+
+module.exports = mongoose.model('Placeholder', placeholderSchema)

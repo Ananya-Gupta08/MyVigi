@@ -1,15 +1,11 @@
-const express = require("express");
-const router = express.Router();
-const PatrolLog = require("../models/PatrolLog");
+// Placeholder route file for backend API endpoints
+// Add route handlers here as the project grows.
 
-router.post("/log", async (req, res) => {
-  try {
-    const log = new PatrolLog(req.body);
-    await log.save();
-    res.json({ message: "Patrol logged" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+const express = require('express')
+const router = express.Router()
 
-module.exports = router;
+router.get('/', (req, res) => {
+  res.json({ message: 'API routes will be added here' })
+})
+
+module.exports = router
