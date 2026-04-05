@@ -3,13 +3,13 @@ function notFound(req, res, next) {
   next(new Error(`Not found - ${req.originalUrl}`))
 }
 
-function errHandler(err, req, res, next) {
-  const sc = res.statusCode === 200 ? 500 : res.statusCode
-  res.status(sc)
+function errorHandler(err, req, res, next) {
+  const statusCode = res.statusCode === 200 ? 500 : res.statusCode
+  res.status(statusCode)
   res.json({
     message: err.message,
     stack: process.env.NODE_ENV === 'production' ? undefined : err.stack,
   })
 }
 
-module.exports = { notFound, errHandler }
+module.exports = { notFound, errorHandler }

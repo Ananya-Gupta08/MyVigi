@@ -1,6 +1,7 @@
 const express = require('express')
 const cors = require('cors')
-
+const dotenv = require('dotenv').config()
+const connectDB = require('./config/db')
 const { notFound, errorHandler } = require('./middleware/errorHandler')
 const apiRoutes = require('./routes')
 
@@ -20,6 +21,13 @@ app.get('/', (req, res) => {
 app.use(notFound)
 app.use(errorHandler)
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
+connectDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`)
+    })
+  })
+  .catch((err) => {
+    console.error('Failed to connect to MongoDB:', err.message)
+    process.exit(1)
+  })
