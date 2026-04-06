@@ -1,0 +1,97 @@
+import { useState } from 'react'
+
+const initialErrors = {
+  email: '',
+  password: '',
+}
+
+function Login({ onSubmit = () => {} }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [errors, setErrors] = useState(initialErrors)
+  const [submitting, setSubmitting] = useState(false)
+  const [statusMessage, setStatusMessage] = useState('')
+
+  const validate = () => {
+    const next = { email: '', password: '' }
+    if (!email.trim()) next.email = 'Email is required.'
+    if (!password.trim()) next.password = 'Password is required.'
+    setErrors(next)
+    return !next.email && !next.password
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setStatusMessage('')
+
+    if (!validate()) {
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await onSubmit({ email, password })
+      setStatusMessage('Login submitted successfully.')
+    } catch (error) {
+      setStatusMessage(error?.message || 'Unable to submit login.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10">
+      <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl shadow-slate-200/70 ring-1 ring-slate-200">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-semibold text-slate-900">Admin Login</h1>
+          <p className="mt-2 text-sm text-slate-500">Enter your credentials to access the dashboard.</p>
+        </div>
+
+        <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+              Email address
+            </label>
+            <input
+              id="email"type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              placeholder="you@example.com"
+            />
+            {errors.email && <p className="mt-2 text-sm text-rose-600">{errors.email}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              placeholder="Enter your password"
+            />
+            {errors.password && <p className="mt-2 text-sm text-rose-600">{errors.password}</p>}
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="inline-flex w-full items-center justify-center rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {submitting ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
+
+        {statusMessage && (
+          <div className="mt-6 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
+            {statusMessage}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default Login
