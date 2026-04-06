@@ -7,6 +7,7 @@ const {
   rejectRequest,
   getUserRequests,
   getPendingRequests,
+  getNotifications,
 } = require('../controllers/requestController')
 
 router.post('/create', authMiddleware, createRequest)
@@ -14,5 +15,6 @@ router.post('/approve', authMiddleware, approveRequest)
 router.post('/reject', authMiddleware, rejectRequest)
 router.get('/my-requests', authMiddleware, getUserRequests)
 router.get('/pending', authMiddleware, getPendingRequests)
+router.get('/notifications', authMiddleware, getNotifications)
 
 module.exports = router

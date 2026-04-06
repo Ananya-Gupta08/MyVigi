@@ -1,5 +1,7 @@
 const User = require('../models/User')
 const PatrolLog = require('../models/PatrolLog')
+const Shift = require('../models/Shift')
+const Request = require('../models/Request')
 
 const requireAdmin = (req, res) => {
   if (req.userRole !== 'admin') {
@@ -23,12 +25,27 @@ const getGuardsData = async (req, res) => {
           .sort('-timestamp')
           .lean()
         const totalLogs = await PatrolLog.countDocuments({ guardId: guard._id })
+        const activeShift = await Shift.findOne({ userId: guard._id, status: 'active' }).lean()
+        const lastRequest = await Request.findOne({ userId: guard._id })
+          .sort('-requestDate')
+          .lean()
 
         return {
           ...guard,
           lastPatrol: lastLog ? lastLog.timestamp : null,
           lastCheckpoint: lastLog ? lastLog.checkpointId : null,
           totalPatrols: totalLogs,
+          activeShiftStart: activeShift ? activeShift.startTime : null,
+          activeShiftStatus: activeShift ? activeShift.status : 'inactive',
+          lastRequest: lastRequest
+            ? {
+                type: lastRequest.type,
+                status: lastRequest.status,
+                reason: lastRequest.reason,
+                requestDate: lastRequest.requestDate,
+                approvalNotes: lastRequest.approvalNotes || null,
+              }
+            : null,
         }
       })
     )

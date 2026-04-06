@@ -2,14 +2,14 @@ const Request = require('../models/Request')
 const User = require('../models/User')
 
 const createRequest = async (req, res) => {
-  const { type, reason } = req.body
+  const { type, reason, latitude, longitude } = req.body
   const userId = req.userId
 
   if (!type || !reason) {
     return res.status(400).json({ message: 'Type and reason are required' })
   }
 
-  if (!['early_exit', 'leave'].includes(type)) {
+  if (!['early_exit', 'leave', 'sos'].includes(type)) {
     return res.status(400).json({ message: 'Invalid request type' })
   }
 
@@ -18,6 +18,7 @@ const createRequest = async (req, res) => {
       userId,
       type,
       reason,
+      location: latitude !== undefined && longitude !== undefined ? { latitude, longitude } : {},
     })
 
     await request.save()
@@ -30,6 +31,7 @@ const createRequest = async (req, res) => {
         reason: request.reason,
         status: request.status,
         requestDate: request.requestDate,
+        location: request.location,
       },
     })
   } catch (err) {
@@ -158,4 +160,32 @@ const getPendingRequests = async (req, res) => {
   }
 }
 
-module.exports = { createRequest, approveRequest, rejectRequest, getUserRequests, getPendingRequests }
+const getNotifications = async (req, res) => {
+  const userId = req.userId
+
+  try {
+    const notifications = await Request.find({ type: 'sos', userId: { $ne: userId } })
+      .sort('-requestDate')
+      .limit(20)
+      .populate('userId', 'username')
+      .lean()
+
+    const formatted = notifications.map((item) => ({
+      id: item._id,
+      from: item.userId.username,
+      reason: item.reason,
+      time: item.requestDate,
+      location: item.location,
+      status: item.status,
+    }))
+
+    res.json({
+      message: 'SOS notifications retrieved',
+      notifications: formatted,
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+module.exports = { createRequest, approveRequest, rejectRequest, getUserRequests, getPendingRequests, getNotifications }

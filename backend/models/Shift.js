@@ -9,21 +9,32 @@ const shiftSchema = new mongoose.Schema(
     },
     qrCode: {
       type: String,
-      required: true,
+      required: false,
     },
     location: {
       latitude: {
         type: Number,
-        required: true,
+        required: false,
       },
       longitude: {
         type: Number,
-        required: true,
+        required: false,
       },
     },
     startTime: {
       type: Date,
       default: Date.now,
+    },
+    endTime: {
+      type: Date,
+    },
+    durationHours: {
+      type: Number,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'completed'],
+      default: 'active',
     },
     endTime: {
       type: Date,

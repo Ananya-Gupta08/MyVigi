@@ -9,12 +9,20 @@ const requestSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['early_exit', 'leave'],
+      enum: ['early_exit', 'leave', 'sos'],
       required: true,
     },
     reason: {
       type: String,
       required: true,
+    },
+    location: {
+      latitude: {
+        type: Number,
+      },
+      longitude: {
+        type: Number,
+      },
     },
     requestDate: {
       type: Date,

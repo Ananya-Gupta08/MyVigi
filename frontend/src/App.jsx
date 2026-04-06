@@ -1,16 +1,28 @@
 import './App.css'
+import Login from './components/Login'
+import GuardDashboard from './components/GuardDashboard'
 
 function App() {
-  return (
-    <div className="app-container">
-      <header>
-        <h1>My Vigi App</h1>
-      </header>
-      <main>
-        <p>This is the frontend shell. Add pages and components in /src as needed.</p>
-      </main>
-    </div>
-  )
+  const path = window.location.pathname
+
+  if (path === '/guard-dashboard') {
+    return <GuardDashboard />
+  }
+
+  if (path === '/admin-dashboard') {
+    return (
+      <div className="app-container">
+        <header>
+          <h1>Admin dashboard coming soon</h1>
+        </header>
+        <main>
+          <p>Please log in with an admin account to view admin features.</p>
+        </main>
+      </div>
+    )
+  }
+
+  return <Login />
 }
 
 export default App
