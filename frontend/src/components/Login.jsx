@@ -5,7 +5,7 @@ const initialErrors = {
   password: '',
 }
 
-function Login({ onSubmit = () => {} }) {
+function Login({ onSubmit }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState(initialErrors)
@@ -30,8 +30,33 @@ function Login({ onSubmit = () => {} }) {
 
     setSubmitting(true)
     try {
-      await onSubmit({ email, password })
-      setStatusMessage('Login submitted successfully.')
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed')
+      }
+
+      localStorage.setItem('token', data.token)
+      if (data.user?.role) {
+        localStorage.setItem('userRole', data.user.role)
+      }
+
+      if (typeof onSubmit === 'function') {
+        onSubmit(data)
+      }
+
+      setStatusMessage('Login successful. Redirecting...')
+
+      const role = data.user?.role || ''
+      const redirectTo = role === 'admin' ? '/admin-dashboard' : '/guard-dashboard'
+      window.location.href = redirectTo
     } catch (error) {
       setStatusMessage(error?.message || 'Unable to submit login.')
     } finally {
@@ -53,7 +78,10 @@ function Login({ onSubmit = () => {} }) {
               Email address
             </label>
             <input
-              id="email"type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
               placeholder="you@example.com"
             />
