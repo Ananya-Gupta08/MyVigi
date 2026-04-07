@@ -25,7 +25,7 @@ const getGuardsData = async (req, res) => {
           .sort('-timestamp')
           .lean()
         const totalLogs = await PatrolLog.countDocuments({ guardId: guard._id })
-        const activeShift = await Shift.findOne({ userId: guard._id, status: 'active' }).lean()
+        const activeShift = await Shift.findOne({ guardId: guard._id, status: 'active' }).lean()
         const lastRequest = await Request.findOne({ userId: guard._id })
           .sort('-requestDate')
           .lean()

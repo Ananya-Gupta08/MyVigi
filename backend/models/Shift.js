@@ -2,7 +2,7 @@ const mongoose = require('mongoose')
 
 const shiftSchema = new mongoose.Schema(
   {
-    userId: {
+    guardId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
@@ -33,15 +33,7 @@ const shiftSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'completed'],
-      default: 'active',
-    },
-    endTime: {
-      type: Date,
-    },
-    status: {
-      type: String,
-      enum: ['active', 'completed'],
+      enum: ['active', 'ended'],
       default: 'active',
     },
   },

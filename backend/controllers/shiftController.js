@@ -2,12 +2,12 @@ const Shift = require('../models/Shift')
 
 const startShift = async (req, res) => {
   const { qrCode, latitude, longitude } = req.body
-  const userId = req.userId
+  const guardId = req.userId
 
   try {
-    const activeShift = await Shift.findOne({ userId, status: 'active' })
+    const activeShift = await Shift.findOne({ guardId, status: 'active' })
     if (activeShift) {
-      return res.status(400).json({ message: 'User already has an active shift' })
+      return res.status(400).json({ message: 'Guard already has an active shift' })
     }
 
     if (latitude !== undefined && longitude !== undefined) {
@@ -17,7 +17,7 @@ const startShift = async (req, res) => {
     }
 
     const shift = new Shift({
-      userId,
+      guardId,
       qrCode: qrCode || 'SHIFT_START',
       location: latitude !== undefined && longitude !== undefined ? { latitude, longitude } : {},
     })
@@ -39,10 +39,10 @@ const startShift = async (req, res) => {
 }
 
 const endShift = async (req, res) => {
-  const userId = req.userId
+  const guardId = req.userId
 
   try {
-    const shift = await Shift.findOne({ userId, status: 'active' })
+    const shift = await Shift.findOne({ guardId, status: 'active' })
     if (!shift) {
       return res.status(404).json({ message: 'No active shift found' })
     }
@@ -69,10 +69,10 @@ const endShift = async (req, res) => {
 }
 
 const getActiveShift = async (req, res) => {
-  const userId = req.userId
+  const guardId = req.userId
 
   try {
-    const shift = await Shift.findOne({ userId, status: 'active' }).lean()
+    const shift = await Shift.findOne({ guardId, status: 'active' }).lean()
     res.json({
       message: 'Active shift retrieved',
       shift: shift || null,
@@ -83,10 +83,10 @@ const getActiveShift = async (req, res) => {
 }
 
 const getShiftHistory = async (req, res) => {
-  const userId = req.userId
+  const guardId = req.userId
 
   try {
-    const shifts = await Shift.find({ userId }).sort('-startTime')
+    const shifts = await Shift.find({ guardId }).sort('-startTime')
     res.json({
       message: 'Shift history retrieved',
       shifts,
