@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import io from 'socket.io-client'
 
 function ActionCard({ title, description, onClick, variant, disabled }) {
   const isPrimary = variant === 'primary'
@@ -41,33 +42,11 @@ function PatrolLogItem({ log }) {
 }
 
 function GuardDashboard() {
-  const [logs, setLogs] = useState([
-    {
-      id: '1',
-      checkpoint: 'CHK101 - Gate A',
-      status: 'Completed',
-      timestamp: '2026-04-06 09:12 AM',
-      notes: 'Patrol completed successfully.',
-    },
-    {
-      id: '2',
-      checkpoint: 'CHK103 - Warehouse',
-      status: 'Completed',
-      timestamp: '2026-04-06 09:45 AM',
-      notes: 'Checked QR and confirmed area clear.',
-    },
-    {
-      id: '3',
-      checkpoint: 'CHK105 - Parking Lot',
-      status: 'Completed',
-      timestamp: '2026-04-06 10:08 AM',
-      notes: 'No issues found.',
-    },
-  ])
+  const [logs, setLogs] = useState([])
   const [statusMessage, setStatusMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [activeShift, setActiveShift] = useState(null)
-  const [sosNotifications, setSosNotifications] = useState([])
+  const [otherSOS, setOtherSOS] = useState([])
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token')
@@ -130,19 +109,31 @@ function GuardDashboard() {
 
   const loadDashboardState = async () => {
     try {
-      const [activeData, notificationsData] = await Promise.all([
-        apiGet('/api/shift/active'),
-        apiGet('/api/request/notifications'),
-      ])
+      const activeData = await apiGet('/api/shift/active')
       setActiveShift(activeData.shift)
-      setSosNotifications(notificationsData.notifications || [])
+
+      try {
+        const sosData = await apiGet('/api/sos')
+        setOtherSOS(sosData.alerts?.filter((a) => a.status === 'active') || [])
+      } catch {
+        // Guard doesn't have admin access to see all SOS
+        setOtherSOS([])
+      }
     } catch (error) {
-      setStatusMessage(error?.message || 'Unable to load dashboard state.')
+      // Don't show error if shift/sos endpoints fail - not critical
     }
   }
 
   useEffect(() => {
     loadDashboardState()
+
+    const interval = setInterval(loadDashboardState, 5000)
+    const socket = io()
+
+    return () => {
+      clearInterval(interval)
+      socket.disconnect()
+    }
   }, [])
 
   const handleUserAction = async (action) => {
@@ -151,6 +142,7 @@ function GuardDashboard() {
 
     try {
       await action()
+      await loadDashboardState()
     } catch (error) {
       setStatusMessage(error?.message || 'Action failed. Please try again.')
     } finally {
@@ -163,17 +155,14 @@ function GuardDashboard() {
       const currentLocation = await getCurrentLocation()
       const payload = currentLocation
         ? {
-            qrCode: 'SHIFT_START',
             latitude: currentLocation.latitude,
             longitude: currentLocation.longitude,
           }
-        : { qrCode: 'SHIFT_START' }
+        : {}
 
       const data = await apiPost('/api/shift/start', payload)
       setActiveShift(data.shift)
-      setStatusMessage(
-        `Shift started at ${new Date(data.shift.startTime).toLocaleTimeString()}.`
-      )
+      setStatusMessage(`Shift started at ${new Date(data.shift.startTime).toLocaleTimeString()}.`)
     })
   }
 
@@ -187,15 +176,15 @@ function GuardDashboard() {
 
       const data = await apiPost('/api/patrol/scan', { checkpointId })
       setStatusMessage(data.message || 'Checkpoint scanned successfully.')
-      setLogs((previousLogs) => [
+      setLogs((prev) => [
         {
           id: `scan-${Date.now()}`,
           checkpoint: checkpointId,
           status: 'Completed',
           timestamp: new Date().toLocaleString(),
-          notes: 'QR scan recorded successfully.',
+          notes: data.log ? `Order: ${data.log.checkpointOrder}` : 'Checkpoint recorded',
         },
-        ...previousLogs,
+        ...prev,
       ])
     })
   }
@@ -210,19 +199,16 @@ function GuardDashboard() {
     })
   }
 
-  const handleEarlyLeave = () => {
+  const handleRequestLeave = () => {
     handleUserAction(async () => {
-      const reason = window.prompt('Enter a short reason for the early leave request:')?.trim()
+      const reason = window.prompt('Enter a short reason for the leave request:')?.trim()
       if (!reason) {
-        setStatusMessage('Early leave request canceled.')
+        setStatusMessage('Leave request canceled.')
         return
       }
 
-      const data = await apiPost('/api/request/create', {
-        type: 'early_exit',
-        reason,
-      })
-      setStatusMessage(data.message || 'Early leave request submitted.')
+      const data = await apiPost('/api/leave/request', { reason })
+      setStatusMessage(data.message || 'Leave request submitted.')
     })
   }
 
@@ -231,128 +217,156 @@ function GuardDashboard() {
       const currentLocation = await getCurrentLocation()
       const reason = window.prompt('Enter a brief SOS description:')?.trim() || 'SOS alert from guard'
       const payload = {
-        type: 'sos',
         reason,
         latitude: currentLocation?.latitude,
         longitude: currentLocation?.longitude,
       }
-      const data = await apiPost('/api/request/create', payload)
-      setStatusMessage(data.message || 'SOS alert sent.')
-      await loadDashboardState()
+      const data = await apiPost('/api/sos', payload)
+      setStatusMessage(data.message || 'SOS alert sent!')
     })
   }
 
-  return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-10 rounded-[2rem] bg-white p-8 shadow-xl shadow-slate-200/60 ring-1 ring-slate-200 sm:p-10">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-sky-600">Guard dashboard</p>
-              <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900">Ready for your next patrol</h1>
-              <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-                Start your shift, scan checkpoints, and review recent patrol activity from one place.
-              </p>
-              {activeShift ? (
-                <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                  Active shift started at {new Date(activeShift.startTime).toLocaleTimeString()}.
-                </div>
-              ) : (
-                <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                  No active shift. Click Start Shift to register your beginning time.
-                </div>
-              )}
-              {statusMessage && (
-                <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-700">
-                  {statusMessage}
-                </div>
-              )}
-            </div>
-            <div className="grid w-full gap-4 sm:grid-cols-2 lg:w-auto">
-              <ActionCard
-                title="Start Shift"
-                description="Begin your shift and mark yourself active."
-                onClick={handleStartShift}
-                variant="primary"
-                disabled={busy || Boolean(activeShift)}
-              />
-              <ActionCard
-                title="Scan QR"
-                description="Open the QR scanner to register a checkpoint."
-                onClick={handleScanQR}
-                variant="secondary"
-                disabled={busy}
-              />
-              <ActionCard
-                title="End Shift"
-                description="Complete your current shift when patrol is done."
-                onClick={handleEndShift}
-                variant="secondary"
-                disabled={busy || !activeShift}
-              />
-              <ActionCard
-                title="Early Leave"
-                description="Request an early leave if needed."
-                onClick={handleEarlyLeave}
-                variant="secondary"
-                disabled={busy}
-              />
-              <ActionCard
-                title="SOS"
-                description="Send a quick alert if you need immediate help."
-                onClick={handleSOS}
-                variant="danger"
-                disabled={busy}
-              />
-            </div>
-          </div>
-        </div>
+  const handleLogout = () => {
+    localStorage.clear()
+    window.location.href = '/'
+  }
 
-        {sosNotifications.length > 0 && (
-          <section className="mb-6 rounded-[2rem] bg-rose-50 p-6 shadow-xl shadow-rose-200/40 ring-1 ring-rose-200 sm:p-8">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold text-rose-900">SOS Alerts</h2>
-                <p className="mt-2 text-sm text-rose-700">Recent SOS alerts from other guards.</p>
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* Navbar */}
+      <nav className="bg-white shadow-md">
+        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Guard Dashboard</h1>
+            <p className="text-sm text-slate-500">MyVigi Patrol System</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-300"
+          >
+            Logout
+          </button>
+        </div>
+      </nav>
+
+      <div className="px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-10 rounded-3xl bg-white p-8 shadow-lg ring-1 ring-slate-200 sm:p-10">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex-1">
+                <p className="text-sm font-semibold uppercase tracking-wider text-sky-600">Shift Status</p>
+                <h1 className="mt-2 text-4xl font-bold text-slate-900">Ready for patrol</h1>
+                <p className="mt-3 text-base text-slate-600">
+                  {activeShift
+                    ? `Shift active since ${new Date(activeShift.startTime).toLocaleTimeString()}`
+                    : 'Start your shift to begin patrol'}
+                </p>
+
+                {activeShift ? (
+                  <div className="mt-4 rounded-lg border-2 border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-emerald-900">✓ Shift Active</p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Started: {new Date(activeShift.startTime).toLocaleString()}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-lg border-2 border-slate-200 bg-slate-100 px-4 py-3">
+                    <p className="text-sm font-semibold text-slate-700">No active shift</p>
+                  </div>
+                )}
+
+                {statusMessage && (
+                  <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3">
+                    <p className="text-sm text-sky-800">{statusMessage}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:flex-col">
+                <ActionCard
+                  title="Start Shift"
+                  description="Begin your shift"
+                  onClick={handleStartShift}
+                  variant="primary"
+                  disabled={busy || Boolean(activeShift)}
+                />
+                <ActionCard
+                  title="End Shift"
+                  description="End your shift"
+                  onClick={handleEndShift}
+                  variant="secondary"
+                  disabled={busy || !activeShift}
+                />
+                <ActionCard
+                  title="Scan QR"
+                  description="Scan checkpoint"
+                  onClick={handleScanQR}
+                  variant="secondary"
+                  disabled={busy}
+                />
+                <ActionCard
+                  title="Request Leave"
+                  description="Submit leave request"
+                  onClick={handleRequestLeave}
+                  variant="secondary"
+                  disabled={busy}
+                />
+                <ActionCard
+                  title="SOS"
+                  description="Send emergency alert"
+                  onClick={handleSOS}
+                  variant="danger"
+                  disabled={busy}
+                />
               </div>
             </div>
-            <div className="space-y-3">
-              {sosNotifications.map((alert) => (
-                <div key={alert.id} className="rounded-3xl border border-rose-200 bg-white px-5 py-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-semibold text-rose-900">SOS from {alert.from}</p>
-                      <p className="mt-1 text-xs text-rose-600">{new Date(alert.time).toLocaleString()}</p>
+          </div>
+
+          {otherSOS.length > 0 && (
+            <section className="mb-8 rounded-3xl bg-rose-50 p-8 shadow-lg ring-1 ring-rose-200">
+              <h2 className="text-2xl font-bold text-rose-900">Active SOS Alerts</h2>
+              <p className="mt-1 text-sm text-rose-700">Alerts from other guards</p>
+              <div className="mt-6 space-y-4">
+                {otherSOS.map((alert) => (
+                  <div
+                    key={alert._id}
+                    className="rounded-lg border-2 border-rose-300 bg-white p-4 shadow-md"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-rose-600 animate-pulse"></div>
+                          <p className="font-bold text-rose-700">SOS ALERT</p>
+                        </div>
+                        <p className="mt-2 text-sm text-slate-700">{alert.reason}</p>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {new Date(alert.createdAt).toLocaleString()}
+                        </p>
+                        {alert.location?.latitude && (
+                          <p className="text-xs text-slate-400">
+                            Lat: {alert.location.latitude.toFixed(4)}, Lng: {alert.location.longitude.toFixed(4)}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">{alert.status}</span>
                   </div>
-                  <p className="mt-3 text-sm text-slate-700">{alert.reason}</p>
-                  {alert.location?.latitude && alert.location?.longitude && (
-                    <p className="mt-3 text-xs text-slate-500">
-                      Location: {alert.location.latitude.toFixed(4)}, {alert.location.longitude.toFixed(4)}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+                ))}
+              </div>
+            </section>
+          )}
 
-        <section className="rounded-[2rem] bg-white p-8 shadow-xl shadow-slate-200/60 ring-1 ring-slate-200 sm:p-10">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-slate-900">Recent patrol logs</h2>
-              <p className="mt-2 text-sm text-slate-600">Track your completed checkpoints and scan history.</p>
-            </div>
-            <div className="rounded-3xl bg-slate-100 px-4 py-2 text-sm text-slate-700">Completed patrols only</div>
-          </div>
-
-          <div className="grid gap-4">
-            {logs.map((log) => (
-              <PatrolLogItem key={log.id} log={log} />
-            ))}
-          </div>
-        </section>
+          {logs.length > 0 && (
+            <section className="rounded-3xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
+              <h2 className="text-2xl font-bold text-slate-900">Patrol History</h2>
+              <p className="mt-1 text-sm text-slate-600">Your scanned checkpoints</p>
+              <div className="mt-6 space-y-3">
+                {logs.map((log) => (
+                  <PatrolLogItem key={log.id} log={log} />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
       </div>
     </div>
   )

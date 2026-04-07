@@ -1,23 +1,23 @@
 import { useState } from 'react'
 
 const initialErrors = {
-  email: '',
+  username: '',
   password: '',
 }
 
 function Login({ onSubmit }) {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState(initialErrors)
   const [submitting, setSubmitting] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
 
   const validate = () => {
-    const next = { email: '', password: '' }
-    if (!email.trim()) next.email = 'Email is required.'
+    const next = { username: '', password: '' }
+    if (!username.trim()) next.username = 'Username is required.'
     if (!password.trim()) next.password = 'Password is required.'
     setErrors(next)
-    return !next.email && !next.password
+    return !next.username && !next.password
   }
 
   const handleSubmit = async (event) => {
@@ -35,7 +35,7 @@ function Login({ onSubmit }) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       })
 
       const data = await response.json()
@@ -74,18 +74,18 @@ function Login({ onSubmit }) {
 
         <form className="space-y-6" onSubmit={handleSubmit} noValidate>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-              Email address
+            <label htmlFor="username" className="block text-sm font-medium text-slate-700">
+              Username
             </label>
             <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-              placeholder="you@example.com"
+              placeholder="Enter your username"
             />
-            {errors.email && <p className="mt-2 text-sm text-rose-600">{errors.email}</p>}
+            {errors.username && <p className="mt-2 text-sm text-rose-600">{errors.username}</p>}
           </div>
 
           <div>
