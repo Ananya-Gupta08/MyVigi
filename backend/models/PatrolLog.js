@@ -12,6 +12,14 @@ const patrolLogSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    checkpointOrder: {
+      type: Number,
+    },
+    status: {
+      type: String,
+      enum: ['completed', 'locked', 'pending'],
+      default: 'completed',
+    },
     timestamp: {
       type: Date,
       default: Date.now,

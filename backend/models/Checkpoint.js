@@ -8,6 +8,10 @@ const checkpointSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    order: {
+      type: Number,
+      required: true,
+    },
     location: {
       type: String,
       required: true,
