@@ -24,6 +24,17 @@ const startShift = async (req, res) => {
 
     await shift.save()
 
+    // Emit real-time update
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('shiftUpdate', {
+        guardId,
+        event: 'shift_started',
+        startTime: shift.startTime,
+        status: shift.status,
+      })
+    }
+
     res.status(201).json({
       message: 'Shift started successfully',
       shift: {
@@ -52,6 +63,18 @@ const endShift = async (req, res) => {
     const durationMs = shift.endTime - shift.startTime
     shift.durationHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100
     await shift.save()
+
+    // Emit real-time update
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('shiftUpdate', {
+        guardId,
+        event: 'shift_ended',
+        endTime: shift.endTime,
+        durationHours: shift.durationHours,
+        status: shift.status,
+      })
+    }
 
     res.json({
       message: 'Shift ended successfully',

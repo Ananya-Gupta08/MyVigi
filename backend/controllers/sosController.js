@@ -19,6 +19,19 @@ const createSOS = async (req, res) => {
     await sosAlert.save()
     await sosAlert.populate('guardId', 'username email')
 
+    // Emit real-time SOS alert
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('sosAlert', {
+        _id: sosAlert._id,
+        guardId: sosAlert.guardId,
+        reason: sosAlert.reason,
+        location: sosAlert.location,
+        status: sosAlert.status,
+        createdAt: sosAlert.createdAt,
+      })
+    }
+
     res.status(201).json({
       message: 'SOS alert created',
       alert: {
@@ -87,6 +100,18 @@ const updateSOS = async (req, res) => {
       sosAlert.resolvedBy = adminId
     }
     await sosAlert.save()
+
+    // Emit real-time SOS update
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('sosUpdate', {
+        sosId: sosAlert._id,
+        status: sosAlert.status,
+        resolvedAt: sosAlert.resolvedAt,
+        resolvedBy: sosAlert.resolvedBy,
+        event: status === 'resolved' ? 'sos_resolved' : 'sos_updated',
+      })
+    }
 
     res.json({
       message: `SOS alert ${status}`,

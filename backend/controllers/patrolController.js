@@ -58,6 +58,18 @@ const scanCheckpoint = async (req, res) => {
     })
     await patrolLog.save()
 
+    // Emit real-time update
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('patrolUpdate', {
+        guardId,
+        checkpointId,
+        checkpointOrder: checkpoint.order,
+        timestamp: patrolLog.timestamp,
+        event: 'checkpoint_scanned',
+      })
+    }
+
     return res.status(201).json({
       message: 'Checkpoint scanned successfully',
       log: {
