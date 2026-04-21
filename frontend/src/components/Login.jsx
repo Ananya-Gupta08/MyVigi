@@ -38,15 +38,23 @@ function Login({ onSubmit }) {
         body: JSON.stringify({ username, password }),
       })
 
-      const data = await response.json()
+      const text = await response.text()
+      let data = null
+      try {
+        data = JSON.parse(text)
+      } catch (jsonError) {
+        throw new Error(`Unexpected server response: ${text || response.statusText}`)
+      }
+
       if (!response.ok) {
         throw new Error(data.message || 'Login failed')
       }
 
       localStorage.setItem('token', data.token)
-      if (data.user?.role) {
-        localStorage.setItem('userRole', data.user.role)
-      }
+      localStorage.setItem('userId', data.user?.id)
+      localStorage.setItem('userName', data.user?.username || '')
+      localStorage.setItem('userRole', data.user?.role || '')
+      localStorage.setItem('profilePhoto', data.user?.profilePhoto || '')
 
       if (typeof onSubmit === 'function') {
         onSubmit(data)
@@ -68,8 +76,8 @@ function Login({ onSubmit }) {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10">
       <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl shadow-slate-200/70 ring-1 ring-slate-200">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-semibold text-slate-900">Admin Login</h1>
-          <p className="mt-2 text-sm text-slate-500">Enter your credentials to access the dashboard.</p>
+          <h1 className="text-3xl font-semibold text-slate-900">Login</h1>
+          <p className="mt-2 text-sm text-slate-500">Enter your credentials to access the guard or admin dashboard.</p>
         </div>
 
         <form className="space-y-6" onSubmit={handleSubmit} noValidate>
@@ -111,6 +119,17 @@ function Login({ onSubmit }) {
             {submitting ? 'Logging in...' : 'Login'}
           </button>
         </form>
+
+        <div className="mt-6 text-center text-sm text-slate-500">
+          Don't have an account?{' '}
+          <button
+            type="button"
+            onClick={() => (window.location.href = '/signup')}
+            className="font-semibold text-sky-600 hover:text-sky-700"
+          >
+            Sign up
+          </button>
+        </div>
 
         {statusMessage && (
           <div className="mt-6 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">

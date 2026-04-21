@@ -8,6 +8,10 @@ function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('guards')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [selectedGuard, setSelectedGuard] = useState(null)
+  const [guardDetails, setGuardDetails] = useState(null)
+  const [showGuardDetails, setShowGuardDetails] = useState(false)
+  const [selectedGuardLoading, setSelectedGuardLoading] = useState(false)
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token')
@@ -46,6 +50,29 @@ function AdminDashboard() {
       }
     } catch (err) {
       setError('Failed to fetch leave requests')
+    }
+  }
+
+  const openGuardDetails = async (guardId) => {
+    setSelectedGuard(guardId)
+    setSelectedGuardLoading(true)
+    setError('')
+
+    try {
+      const response = await fetch(`/api/admin/guards/${guardId}`, {
+        headers: getAuthHeaders(),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        setGuardDetails(data.guard)
+        setShowGuardDetails(true)
+      } else {
+        setError(data.message)
+      }
+    } catch (err) {
+      setError('Failed to load guard details')
+    } finally {
+      setSelectedGuardLoading(false)
     }
   }
 
@@ -213,8 +240,25 @@ function AdminDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {guards.map((guard) => (
-                    <tr key={guard._id} className="text-sm hover:bg-slate-50">
-                      <td className="px-6 py-4 font-semibold text-slate-900">{guard.username}</td>
+                    <tr
+                      key={guard._id}
+                      onClick={() => openGuardDetails(guard._id)}
+                      className="cursor-pointer text-sm hover:bg-slate-50"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 overflow-hidden rounded-full bg-slate-100">
+                            {guard.profilePhoto ? (
+                              <img src={guard.profilePhoto} alt={guard.username} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-slate-600">
+                                {guard.username?.[0] || 'G'}
+                              </div>
+                            )}
+                          </div>
+                          <span className="font-semibold text-slate-900">{guard.username}</span>
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-slate-600">{guard.email}</td>
                       <td className="px-6 py-4">
                         <span
@@ -258,6 +302,98 @@ function AdminDashboard() {
           </div>
         )}
 
+        {showGuardDetails && guardDetails && (
+          <div className="fixed inset-0 z-50 overflow-auto bg-black/50 px-4 py-8">
+            <div className="mx-auto w-full max-w-5xl rounded-3xl bg-white p-8 shadow-2xl ring-1 ring-slate-200">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-4">
+                    <div className="h-20 w-20 overflow-hidden rounded-3xl bg-slate-100">
+                      {guardDetails.profilePhoto ? (
+                        <img src={guardDetails.profilePhoto} alt={guardDetails.username} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-slate-600">
+                          {guardDetails.username?.[0] || 'G'}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900">{guardDetails.username}</h2>
+                      <p className="text-sm text-slate-600">{guardDetails.email}</p>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm text-slate-700">Role: {guardDetails.role}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowGuardDetails(false)}
+                  className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-200"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-8 grid gap-6 lg:grid-cols-3">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                  <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Current Shift</p>
+                  <p className="mt-4 text-lg font-semibold text-slate-900">
+                    {guardDetails.activeShift?.status === 'active' ? 'Active' : 'No active shift'}
+                  </p>
+                  {guardDetails.activeShift?.startTime && (
+                    <p className="mt-2 text-sm text-slate-600">Started: {new Date(guardDetails.activeShift.startTime).toLocaleString()}</p>
+                  )}
+                </div>
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                  <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Current Route</p>
+                  <p className="mt-4 text-lg font-semibold text-slate-900">
+                    {guardDetails.currentCheckpoint || 'Not started'}
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                  <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Completed Checkpoints</p>
+                  <p className="mt-4 text-lg font-semibold text-slate-900">{guardDetails.completedCheckpoints?.length || 0}</p>
+                </div>
+              </div>
+
+              <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6">
+                <h3 className="text-xl font-semibold text-slate-900">Assigned Patrol Route</h3>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {guardDetails.patrolRoute?.map((checkpoint) => (
+                    <div key={checkpoint.checkpointId} className="rounded-3xl border border-slate-200 p-4">
+                      <p className="text-sm text-slate-500">Checkpoint {checkpoint.order}</p>
+                      <p className="mt-2 font-semibold text-slate-900">{checkpoint.checkpointId}</p>
+                      <p className="mt-1 text-sm text-slate-500">{checkpoint.location}</p>
+                      <p className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${checkpoint.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                        {checkpoint.status}
+                      </p>
+                      {checkpoint.completedAt && (
+                        <p className="mt-2 text-xs text-slate-500">{new Date(checkpoint.completedAt).toLocaleString()}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                <h3 className="text-xl font-semibold text-slate-900">Recent Completed Checkpoints</h3>
+                {guardDetails.completedCheckpoints?.length ? (
+                  <div className="mt-4 space-y-3">
+                    {guardDetails.completedCheckpoints.map((checkpoint) => (
+                      <div key={`${checkpoint.checkpointId}-${checkpoint.completedAt}`} className="rounded-3xl bg-white p-4 shadow-sm">
+                        <p className="font-semibold text-slate-900">{checkpoint.checkpointId}</p>
+                        <p className="mt-1 text-sm text-slate-500">Order {checkpoint.order}</p>
+                        <p className="mt-2 text-xs text-slate-500">Completed at {new Date(checkpoint.completedAt).toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-600">No checkpoints completed yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Leave Requests Tab */}
         {activeTab === 'leaves' && (
           <div className="space-y-4">
@@ -269,33 +405,35 @@ function AdminDashboard() {
               leaves
                 .filter((l) => l.status === 'pending')
                 .map((leave) => (
-                  <div key={leave._id} className="rounded-lg border border-slate-200 bg-white p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-semibold text-slate-900">{leave.guardId?.username}</p>
-                        <p className="mt-1 text-sm text-slate-600">{leave.reason}</p>
-                        <p className="mt-2 text-xs text-slate-500">
-                          Requested: {new Date(leave.requestedAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => reviewLeave(leave._id, 'approved')}
-                          disabled={loading}
-                          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => reviewLeave(leave._id, 'rejected')}
-                          disabled={loading}
-                          className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
-                        >
-                          Reject
-                        </button>
+                    <div key={leave._id} className="rounded-lg border border-slate-200 bg-white p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-semibold text-slate-900">{leave.guardId?.username}</p>
+                          <p className="mt-1 text-sm text-slate-600">{leave.reason}</p>
+                          <div className="mt-2 text-xs text-slate-500">
+                            <p>From: {new Date(leave.startDate).toLocaleDateString()}</p>
+                            <p>To: {new Date(leave.endDate).toLocaleDateString()}</p>
+                            <p>Requested: {new Date(leave.requestedAt).toLocaleString()}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => reviewLeave(leave._id, 'approved')}
+                            disabled={loading}
+                            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => reviewLeave(leave._id, 'rejected')}
+                            disabled={loading}
+                            className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
                 ))
             )}
           </div>

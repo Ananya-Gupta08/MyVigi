@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 * {
   box-sizing: border-box;
 }
@@ -11,6 +13,5 @@ body,
 
 body {
   font-family: system-ui, sans-serif;
-  background: #f5f7fb;
   color: #111827;
 }

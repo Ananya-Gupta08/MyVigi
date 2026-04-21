@@ -47,6 +47,13 @@ function GuardDashboard() {
   const [busy, setBusy] = useState(false)
   const [activeShift, setActiveShift] = useState(null)
   const [otherSOS, setOtherSOS] = useState([])
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
+  const [leaveReason, setLeaveReason] = useState('')
+  const [leaveStartDate, setLeaveStartDate] = useState('')
+  const [leaveEndDate, setLeaveEndDate] = useState('')
+  const [leaveRequests, setLeaveRequests] = useState([])
+  const [userName, setUserName] = useState('Guard')
+  const [profilePhoto, setProfilePhoto] = useState('')
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token')
@@ -112,6 +119,9 @@ function GuardDashboard() {
       const activeData = await apiGet('/api/shift/active')
       setActiveShift(activeData.shift)
 
+      const leaveData = await apiGet('/api/leave')
+      setLeaveRequests(leaveData.leaves || [])
+
       try {
         const sosData = await apiGet('/api/sos')
         setOtherSOS(sosData.alerts?.filter((a) => a.status === 'active') || [])
@@ -125,6 +135,8 @@ function GuardDashboard() {
   }
 
   useEffect(() => {
+    setUserName(localStorage.getItem('userName') || 'Guard')
+    setProfilePhoto(localStorage.getItem('profilePhoto') || '')
     loadDashboardState()
 
     const interval = setInterval(loadDashboardState, 5000)
@@ -167,26 +179,7 @@ function GuardDashboard() {
   }
 
   const handleScanQR = () => {
-    handleUserAction(async () => {
-      const checkpointId = window.prompt('Enter the checkpoint ID from the QR code:')?.trim()
-      if (!checkpointId) {
-        setStatusMessage('Checkpoint scan canceled.')
-        return
-      }
-
-      const data = await apiPost('/api/patrol/scan', { checkpointId })
-      setStatusMessage(data.message || 'Checkpoint scanned successfully.')
-      setLogs((prev) => [
-        {
-          id: `scan-${Date.now()}`,
-          checkpoint: checkpointId,
-          status: 'Completed',
-          timestamp: new Date().toLocaleString(),
-          notes: data.log ? `Order: ${data.log.checkpointOrder}` : 'Checkpoint recorded',
-        },
-        ...prev,
-      ])
-    })
+    window.location.href = '/guard-patrol'
   }
 
   const handleEndShift = () => {
@@ -200,16 +193,48 @@ function GuardDashboard() {
   }
 
   const handleRequestLeave = () => {
+    setShowLeaveModal(true)
+  }
+
+  const handleSubmitLeaveRequest = () => {
     handleUserAction(async () => {
-      const reason = window.prompt('Enter a short reason for the leave request:')?.trim()
-      if (!reason) {
-        setStatusMessage('Leave request canceled.')
+      if (!leaveReason.trim()) {
+        setStatusMessage('Please enter a reason for the leave request.')
         return
       }
 
-      const data = await apiPost('/api/leave/request', { reason })
+      if (!leaveStartDate || !leaveEndDate) {
+        setStatusMessage('Please select both start and end dates.')
+        return
+      }
+
+      const startDate = new Date(leaveStartDate)
+      const endDate = new Date(leaveEndDate)
+
+      if (startDate >= endDate) {
+        setStatusMessage('End date must be after start date.')
+        return
+      }
+
+      const data = await apiPost('/api/leave/request', {
+        reason: leaveReason.trim(),
+        startDate: leaveStartDate,
+        endDate: leaveEndDate
+      })
+
       setStatusMessage(data.message || 'Leave request submitted.')
+      setShowLeaveModal(false)
+      setLeaveReason('')
+      setLeaveStartDate('')
+      setLeaveEndDate('')
     })
+  }
+
+  const handleCancelLeaveRequest = () => {
+    setShowLeaveModal(false)
+    setLeaveReason('')
+    setLeaveStartDate('')
+    setLeaveEndDate('')
   }
 
   const handleSOS = () => {
@@ -253,6 +278,21 @@ function GuardDashboard() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-10 rounded-3xl bg-white p-8 shadow-lg ring-1 ring-slate-200 sm:p-10">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 overflow-hidden rounded-3xl bg-slate-100">
+                  {profilePhoto ? (
+                    <img src={profilePhoto} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-slate-600">
+                      {userName?.trim()?.[0] || 'G'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-wider text-sky-600">Welcome back</p>
+                  <h2 className="mt-1 text-2xl font-bold text-slate-900">{userName}</h2>
+                </div>
+              </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold uppercase tracking-wider text-sky-600">Shift Status</p>
                 <h1 className="mt-2 text-4xl font-bold text-slate-900">Ready for patrol</h1>
@@ -355,6 +395,40 @@ function GuardDashboard() {
             </section>
           )}
 
+          {leaveRequests.length > 0 && (
+            <section className="mb-8 rounded-3xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
+              <h2 className="text-2xl font-bold text-slate-900">My Leave Requests</h2>
+              <p className="mt-1 text-sm text-slate-600">Review your leave request status and approver details.</p>
+              <div className="mt-6 space-y-4">
+                {leaveRequests.map((leave) => (
+                  <div key={leave._id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-900">{leave.reason}</p>
+                        <p className="text-sm text-slate-600">
+                          From: {new Date(leave.startDate).toLocaleDateString()} • To: {new Date(leave.endDate).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-slate-500">Requested: {new Date(leave.requestedAt).toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
+                        {leave.status === 'approved' ? 'Approved' : leave.status === 'rejected' ? 'Rejected' : 'Pending'}
+                      </div>
+                    </div>
+                    {leave.status === 'approved' && leave.reviewedBy?.username && (
+                      <p className="mt-3 text-sm text-emerald-700">Approved by admin {leave.reviewedBy.username}</p>
+                    )}
+                    {leave.status === 'rejected' && leave.reviewedBy?.username && (
+                      <p className="mt-3 text-sm text-rose-700">Rejected by admin {leave.reviewedBy.username}</p>
+                    )}
+                    {leave.adminNotes && (
+                      <p className="mt-2 text-sm text-slate-600">Admin notes: {leave.adminNotes}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {logs.length > 0 && (
             <section className="rounded-3xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
               <h2 className="text-2xl font-bold text-slate-900">Patrol History</h2>
@@ -368,6 +442,78 @@ function GuardDashboard() {
           )}
         </div>
       </div>
+
+      {/* Leave Request Modal */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-slate-900">Request Leave</h2>
+              <p className="mt-1 text-sm text-slate-600">Submit a leave request for admin approval</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="leaveReason" className="block text-sm font-medium text-slate-700">
+                  Reason
+                </label>
+                <textarea
+                  id="leaveReason"
+                  value={leaveReason}
+                  onChange={(e) => setLeaveReason(e.target.value)}
+                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  placeholder="Enter reason for leave request"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="leaveStartDate" className="block text-sm font-medium text-slate-700">
+                  Start Date
+                </label>
+                <input
+                  id="leaveStartDate"
+                  type="date"
+                  value={leaveStartDate}
+                  onChange={(e) => setLeaveStartDate(e.target.value)}
+                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="leaveEndDate" className="block text-sm font-medium text-slate-700">
+                  End Date
+                </label>
+                <input
+                  id="leaveEndDate"
+                  type="date"
+                  value={leaveEndDate}
+                  onChange={(e) => setLeaveEndDate(e.target.value)}
+                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <button
+                type="button"
+                onClick={handleCancelLeaveRequest}
+                className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitLeaveRequest}
+                disabled={busy}
+                className="flex-1 rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {busy ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
