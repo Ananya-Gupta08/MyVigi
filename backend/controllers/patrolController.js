@@ -84,4 +84,39 @@ const scanCheckpoint = async (req, res) => {
   }
 }
 
-module.exports = { scanCheckpoint }
+const getRoute = async (req, res) => {
+  const guardId = req.userId
+
+  try {
+    const checkpoints = await Checkpoint.find().sort('order').lean()
+    const logs = await PatrolLog.find({ guardId, status: 'completed' }).lean()
+    const completedByOrder = new Map()
+
+    logs.forEach((log) => {
+      const existing = completedByOrder.get(log.checkpointOrder)
+      if (!existing || new Date(log.timestamp) > new Date(existing.timestamp)) {
+        completedByOrder.set(log.checkpointOrder, log)
+      }
+    })
+
+    const route = checkpoints.map((checkpoint) => {
+      const completed = completedByOrder.get(checkpoint.order)
+      return {
+        checkpointId: checkpoint.checkpointId,
+        order: checkpoint.order,
+        location: checkpoint.location,
+        status: completed ? 'completed' : 'pending',
+        completedAt: completed ? completed.timestamp : null,
+      }
+    })
+
+    return res.json({
+      message: 'Guard patrol route retrieved',
+      route,
+    })
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+}
+
+module.exports = { scanCheckpoint, getRoute }

@@ -2,17 +2,34 @@ const LeaveRequest = require('../models/LeaveRequest')
 const User = require('../models/User')
 
 const requestLeave = async (req, res) => {
-  const { reason } = req.body
+  const { reason, startDate, endDate } = req.body
   const guardId = req.userId
 
   if (!reason || reason.trim() === '') {
     return res.status(400).json({ message: 'Reason is required' })
   }
 
+  if (!startDate || !endDate) {
+    return res.status(400).json({ message: 'Start date and end date are required' })
+  }
+
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return res.status(400).json({ message: 'Invalid date format' })
+  }
+
+  if (start >= end) {
+    return res.status(400).json({ message: 'End date must be after start date' })
+  }
+
   try {
     const leaveRequest = new LeaveRequest({
       guardId,
       reason,
+      startDate: start,
+      endDate: end,
     })
 
     await leaveRequest.save()
@@ -22,6 +39,8 @@ const requestLeave = async (req, res) => {
       leave: {
         id: leaveRequest._id,
         reason: leaveRequest.reason,
+        startDate: leaveRequest.startDate,
+        endDate: leaveRequest.endDate,
         status: leaveRequest.status,
         requestedAt: leaveRequest.requestedAt,
       },
@@ -32,17 +51,22 @@ const requestLeave = async (req, res) => {
 }
 
 const getLeaveRequests = async (req, res) => {
-  const adminRole = req.userRole
-
-  if (adminRole !== 'admin') {
-    return res.status(403).json({ message: 'Admin access required' })
-  }
+  const userId = req.userId
+  const userRole = req.userRole
 
   try {
-    const leaves = await LeaveRequest.find()
-      .populate('guardId', 'username email')
-      .populate('reviewedBy', 'username')
-      .sort('-requestedAt')
+    let leaves
+    if (userRole === 'admin') {
+      leaves = await LeaveRequest.find()
+        .populate('guardId', 'username email')
+        .populate('reviewedBy', 'username')
+        .sort('-requestedAt')
+    } else {
+      leaves = await LeaveRequest.find({ guardId: userId })
+        .populate('guardId', 'username email')
+        .populate('reviewedBy', 'username')
+        .sort('-requestedAt')
+    }
 
     res.json({
       message: 'Leave requests retrieved',
@@ -54,7 +78,8 @@ const getLeaveRequests = async (req, res) => {
 }
 
 const reviewLeave = async (req, res) => {
-  const { leaveId, status, adminNotes } = req.body
+  const { status, adminNotes } = req.body
+  const leaveId = req.params.id || req.body.leaveId
   const adminId = req.userId
   const adminRole = req.userRole
 

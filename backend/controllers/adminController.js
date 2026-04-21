@@ -1,4 +1,5 @@
 const User = require('../models/User')
+const Checkpoint = require('../models/Checkpoint')
 const PatrolLog = require('../models/PatrolLog')
 const Shift = require('../models/Shift')
 const Request = require('../models/Request')
@@ -16,7 +17,7 @@ const getGuardsData = async (req, res) => {
 
   try {
     const guards = await User.find({ role: 'guard' })
-      .select('username email role createdAt')
+      .select('username email role createdAt profilePhoto')
       .lean()
 
     const enhanced = await Promise.all(
@@ -56,6 +57,64 @@ const getGuardsData = async (req, res) => {
   }
 }
 
+const getGuardDetails = async (req, res) => {
+  if (req.userRole !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required' })
+  }
+
+  try {
+    const guardId = req.params.id
+    const guard = await User.findOne({ _id: guardId, role: 'guard' })
+      .select('username email role createdAt profilePhoto')
+      .lean()
+
+    if (!guard) {
+      return res.status(404).json({ message: 'Guard not found' })
+    }
+
+    const route = await Checkpoint.find().sort('order').lean()
+    const completedLogs = await PatrolLog.find({ guardId, status: 'completed' }).sort('checkpointOrder').lean()
+    const activeShift = await Shift.findOne({ guardId, status: 'active' }).lean()
+
+    const completedByOrder = new Map()
+    completedLogs.forEach((log) => {
+      completedByOrder.set(log.checkpointOrder, log)
+    })
+
+    const patrolRoute = route.map((checkpoint) => {
+      const completed = completedByOrder.get(checkpoint.order)
+      return {
+        checkpointId: checkpoint.checkpointId,
+        order: checkpoint.order,
+        location: checkpoint.location,
+        status: completed ? 'completed' : 'pending',
+        completedAt: completed ? completed.timestamp : null,
+      }
+    })
+
+    const completedCheckpoints = completedLogs.map((log) => ({
+      checkpointId: log.checkpointId,
+      order: log.checkpointOrder,
+      completedAt: log.timestamp,
+    }))
+
+    res.json({
+      message: 'Guard details retrieved',
+      guard: {
+        ...guard,
+        patrolRoute,
+        completedCheckpoints,
+        activeShift,
+        currentCheckpoint: completedCheckpoints.length
+          ? completedCheckpoints[completedCheckpoints.length - 1].checkpointId
+          : null,
+      },
+    })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
 const getPatrolUpdates = async (req, res) => {
   if (req.userRole !== 'admin') {
     return res.status(403).json({ message: 'Admin access required' })
@@ -82,4 +141,4 @@ const getPatrolUpdates = async (req, res) => {
   }
 }
 
-module.exports = { getGuardsData, getPatrolUpdates }
+module.exports = { getGuardsData, getGuardDetails, getPatrolUpdates }

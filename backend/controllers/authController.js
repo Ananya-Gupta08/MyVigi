@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken')
 const User = require('../models/User')
 
 const signup = async (req, res) => {
-  const { username, email, password, role } = req.body
+  const { username, email, password, role, profilePhoto } = req.body
 
   if (!username || !email || !password) {
     return res.status(400).json({ message: 'All fields are required' })
@@ -14,7 +14,13 @@ const signup = async (req, res) => {
       return res.status(400).json({ message: 'User already exists' })
     }
 
-    const user = new User({ username, email, password, role: role || 'guard' })
+    const user = new User({
+      username,
+      email,
+      password,
+      role: role || 'guard',
+      profilePhoto: profilePhoto || '',
+    })
     await user.save()
 
     const token = jwt.sign(
@@ -26,7 +32,13 @@ const signup = async (req, res) => {
     res.status(201).json({
       message: 'Signup successful',
       token,
-      user: { id: user._id, username: user.username, email: user.email, role: user.role },
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        profilePhoto: user.profilePhoto || '',
+      },
     })
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -60,7 +72,13 @@ const login = async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
-      user: { id: user._id, username: user.username, email: user.email, role: user.role },
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        profilePhoto: user.profilePhoto || '',
+      },
     })
   } catch (err) {
     res.status(500).json({ message: err.message })

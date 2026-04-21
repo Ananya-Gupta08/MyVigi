@@ -59,7 +59,7 @@ const endShift = async (req, res) => {
     }
 
     shift.endTime = new Date()
-    shift.status = 'completed'
+    shift.status = 'ended'
     const durationMs = shift.endTime - shift.startTime
     shift.durationHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100
     await shift.save()
