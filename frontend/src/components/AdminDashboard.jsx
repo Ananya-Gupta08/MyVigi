@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import io from 'socket.io-client'
+import { buildApiUrl, getSocketUrl } from '../lib/api'
 
 function SosToast({ alert, onDismiss, onOpen }) {
   return (
@@ -77,7 +78,7 @@ function AdminDashboard() {
 
   const fetchGuards = async () => {
     try {
-      const response = await fetch('/api/admin/guards-status', {
+      const response = await fetch(buildApiUrl('/api/admin/guards-status'), {
         headers: getAuthHeaders(),
       })
       const data = await response.json()
@@ -93,7 +94,7 @@ function AdminDashboard() {
 
   const fetchLeaves = async () => {
     try {
-      const response = await fetch('/api/leave', {
+      const response = await fetch(buildApiUrl('/api/leave'), {
         headers: getAuthHeaders(),
       })
       const data = await response.json()
@@ -109,7 +110,7 @@ function AdminDashboard() {
 
   const fetchSOS = async (dismissedIds = dismissedNotificationIds) => {
     try {
-      const response = await fetch('/api/sos', {
+      const response = await fetch(buildApiUrl('/api/sos'), {
         headers: getAuthHeaders(),
       })
       const data = await response.json()
@@ -126,7 +127,7 @@ function AdminDashboard() {
 
   const fetchCheckpoints = async () => {
     try {
-      const response = await fetch('/api/admin/checkpoints', {
+      const response = await fetch(buildApiUrl('/api/admin/checkpoints'), {
         headers: getAuthHeaders(),
       })
       const data = await response.json()
@@ -146,7 +147,7 @@ function AdminDashboard() {
     setError('')
 
     try {
-      const response = await fetch(`/api/admin/guards/${guardId}`, {
+      const response = await fetch(buildApiUrl(`/api/admin/guards/${guardId}`), {
         headers: getAuthHeaders(),
       })
       const data = await response.json()
@@ -167,7 +168,7 @@ function AdminDashboard() {
   const reviewLeave = async (leaveId, status, notes = '') => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/leave/${leaveId}`, {
+      const response = await fetch(buildApiUrl(`/api/leave/${leaveId}`), {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify({ status, adminNotes: notes }),
@@ -188,7 +189,7 @@ function AdminDashboard() {
   const resolveSOS = async (sosId) => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/sos/${sosId}`, {
+      const response = await fetch(buildApiUrl(`/api/sos/${sosId}`), {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify({ sosId, status: 'resolved' }),
@@ -230,7 +231,7 @@ function AdminDashboard() {
     setRouteMessage('')
 
     try {
-      const response = await fetch(`/api/admin/guards/${guardDetails._id}/route`, {
+      const response = await fetch(buildApiUrl(`/api/admin/guards/${guardDetails._id}/route`), {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify({ assignedCheckpointIds: selectedRouteIds }),
@@ -260,7 +261,7 @@ function AdminDashboard() {
     setRouteMessage('')
 
     try {
-      const response = await fetch(`/api/admin/guards/${guardDetails._id}/route/reset`, {
+      const response = await fetch(buildApiUrl(`/api/admin/guards/${guardDetails._id}/route/reset`), {
         method: 'POST',
         headers: getAuthHeaders(),
       })
@@ -297,7 +298,7 @@ function AdminDashboard() {
       fetchSOS()
     }, 5000)
 
-    const socket = io()
+    const socket = io(getSocketUrl())
     socket.on('shiftUpdate', fetchGuards)
     socket.on('patrolUpdate', fetchGuards)
     socket.on('sosAlert', (alert) => {

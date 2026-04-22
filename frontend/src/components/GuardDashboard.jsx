@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import io from 'socket.io-client'
+import { buildApiUrl, getSocketUrl } from '../lib/api'
 
 function ActionCard({ title, description, onClick, variant, disabled }) {
   const toneClasses =
@@ -97,7 +98,7 @@ function GuardDashboard() {
   }
 
   const apiPost = async (path, body) => {
-    const response = await fetch(path, {
+    const response = await fetch(buildApiUrl(path), {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(body),
@@ -112,7 +113,7 @@ function GuardDashboard() {
   }
 
   const apiGet = async (path) => {
-    const response = await fetch(path, {
+    const response = await fetch(buildApiUrl(path), {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -179,7 +180,7 @@ function GuardDashboard() {
     loadDashboardState(currentUserId, safeDismissedIds)
 
     const interval = setInterval(() => loadDashboardState(currentUserId), 5000)
-    const socket = io()
+    const socket = io(getSocketUrl())
 
     socket.on('sosAlert', (alert) => {
       setSosAlerts((current) => {

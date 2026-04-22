@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { buildApiUrl } from '../lib/api'
 
 const initialErrors = {
   username: '',
@@ -37,7 +38,7 @@ function Signup() {
 
     setSubmitting(true)
     try {
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetch(buildApiUrl('/api/auth/signup'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

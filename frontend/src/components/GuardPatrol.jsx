@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { buildApiUrl } from '../lib/api'
 
 const normalizeScanValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '')
 
@@ -44,7 +45,7 @@ function GuardPatrol() {
   }
 
   const apiGet = async (path) => {
-    const response = await fetch(path, {
+    const response = await fetch(buildApiUrl(path), {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -58,7 +59,7 @@ function GuardPatrol() {
   }
 
   const apiPost = async (path, body) => {
-    const response = await fetch(path, {
+    const response = await fetch(buildApiUrl(path), {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(body),
