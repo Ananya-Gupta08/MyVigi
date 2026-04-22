@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { buildApiUrl } from '../lib/api'
 
 const initialErrors = {
@@ -7,6 +8,7 @@ const initialErrors = {
 }
 
 function Login({ onSubmit }) {
+  const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [profilePhoto, setProfilePhoto] = useState('')
@@ -65,7 +67,7 @@ function Login({ onSubmit }) {
       setStatusMessage('Login successful. Redirecting...')
 
       const role = data.user?.role || ''
-      window.location.href = role === 'admin' ? '/admin-dashboard' : '/guard-dashboard'
+      navigate(role === 'admin' ? '/admin-dashboard' : '/guard-dashboard', { replace: true })
     } catch (error) {
       setStatusMessage(error?.message || 'Unable to submit login.')
     } finally {
@@ -165,13 +167,12 @@ function Login({ onSubmit }) {
 
           <div className="mt-6 text-center text-sm text-[#6f745d]">
             Don&apos;t have an account?{' '}
-            <button
-              type="button"
-              onClick={() => (window.location.href = '/signup')}
+            <Link
+              to="/signup"
               className="font-semibold text-[#546b41] hover:text-[#435533]"
             >
               Sign up
-            </button>
+            </Link>
           </div>
 
           {statusMessage && (

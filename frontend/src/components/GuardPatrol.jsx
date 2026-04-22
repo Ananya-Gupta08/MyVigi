@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { buildApiUrl } from '../lib/api'
 
 const normalizeScanValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '')
@@ -25,6 +26,7 @@ async function detectQrFromFile(file) {
 }
 
 function GuardPatrol() {
+  const navigate = useNavigate()
   const [route, setRoute] = useState([])
   const [selectedCheckpoint, setSelectedCheckpoint] = useState(null)
   const [scanModalOpen, setScanModalOpen] = useState(false)
@@ -176,7 +178,7 @@ function GuardPatrol() {
   }
 
   const handleBack = () => {
-    window.location.href = '/guard-dashboard'
+    navigate('/guard-dashboard')
   }
 
   const nextPendingCheckpoint = route.find((checkpoint) => checkpoint.canScan) || null

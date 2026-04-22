@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import io from 'socket.io-client'
 import { buildApiUrl, getSocketUrl } from '../lib/api'
 
@@ -40,6 +41,7 @@ const mapAlertToToast = (alert) => ({
 })
 
 function AdminDashboard() {
+  const navigate = useNavigate()
   const dismissedStorageKey = 'adminDismissedSosNotifications'
   const [guards, setGuards] = useState([])
   const [leaves, setLeaves] = useState([])
@@ -335,7 +337,7 @@ function AdminDashboard() {
 
   const handleLogout = () => {
     localStorage.clear()
-    window.location.href = '/'
+    navigate('/', { replace: true })
   }
 
   const openSosDetails = () => {

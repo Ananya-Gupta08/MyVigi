@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import io from 'socket.io-client'
 import { buildApiUrl, getSocketUrl } from '../lib/api'
 
@@ -69,6 +70,7 @@ const mapAlertToToast = (alert, currentUserId) => {
 }
 
 function GuardDashboard() {
+  const navigate = useNavigate()
   const dismissedStorageKey = 'guardDismissedSosNotifications'
   const [statusMessage, setStatusMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -237,7 +239,7 @@ function GuardDashboard() {
   }
 
   const handleScanQR = () => {
-    window.location.href = '/guard-patrol'
+    navigate('/guard-patrol')
   }
 
   const handleEndShift = () => {
@@ -298,7 +300,7 @@ function GuardDashboard() {
 
   const handleLogout = () => {
     localStorage.clear()
-    window.location.href = '/'
+    navigate('/', { replace: true })
   }
 
   const openSosDetails = () => {

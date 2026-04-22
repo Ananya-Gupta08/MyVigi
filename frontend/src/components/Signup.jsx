@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { buildApiUrl } from '../lib/api'
 
 const initialErrors = {
@@ -9,6 +10,7 @@ const initialErrors = {
 }
 
 function Signup() {
+  const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -65,7 +67,7 @@ function Signup() {
       localStorage.setItem('profilePhoto', data.user?.profilePhoto || '')
 
       setStatusMessage('Signup successful. Redirecting...')
-      window.location.href = data.user?.role === 'admin' ? '/admin-dashboard' : '/guard-dashboard'
+      navigate(data.user?.role === 'admin' ? '/admin-dashboard' : '/guard-dashboard', { replace: true })
     } catch (error) {
       setStatusMessage(error?.message || 'Unable to complete signup.')
     } finally {
@@ -196,13 +198,12 @@ function Signup() {
 
           <div className="mt-6 text-center text-sm text-[#6f745d]">
             Already have an account?{' '}
-            <button
-              type="button"
-              onClick={() => (window.location.href = '/')}
+            <Link
+              to="/"
               className="font-semibold text-[#546b41] hover:text-[#435533]"
             >
               Login
-            </button>
+            </Link>
           </div>
 
           {statusMessage && (

@@ -12,6 +12,7 @@
     "@tailwindcss/postcss": "^4.2.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-router-dom": "^7.14.2",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
