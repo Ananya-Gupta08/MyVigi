@@ -1,28 +1,83 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import jsQR from 'jsqr'
 import { buildApiUrl } from '../lib/api'
 
 const normalizeScanValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '')
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('Could not read the selected image file.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function loadImageElement(file) {
+  const dataUrl = await readFileAsDataUrl(file)
+
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Could not load the selected image.'))
+    image.src = dataUrl
+  })
+}
+
+async function detectWithBarcodeDetector(file) {
+  if (typeof window === 'undefined' || typeof window.BarcodeDetector === 'undefined') {
+    return ''
+  }
+
+  const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
+  const bitmap = await createImageBitmap(file)
+
+  try {
+    const results = await detector.detect(bitmap)
+    return results[0]?.rawValue || ''
+  } finally {
+    bitmap.close()
+  }
+}
+
+async function detectWithJsQr(file) {
+  const image = await loadImageElement(file)
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+
+  if (!context) {
+    throw new Error('Could not read image pixels for QR detection.')
+  }
+
+  canvas.width = image.naturalWidth || image.width
+  canvas.height = image.naturalHeight || image.height
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+  const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: 'attemptBoth',
+  })
+
+  return qrCode?.data || ''
+}
 
 async function detectQrFromFile(file) {
   if (!file) {
     return ''
   }
 
-  if (typeof window === 'undefined' || typeof window.BarcodeDetector === 'undefined') {
-    throw new Error('QR detection is not supported in this browser. Use Chrome on mobile or enter the QR value manually.')
+  const barcodeValue = await detectWithBarcodeDetector(file)
+  if (barcodeValue) {
+    return barcodeValue
   }
 
-  const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
-  const bitmap = await createImageBitmap(file)
-  const results = await detector.detect(bitmap)
-  bitmap.close()
-
-  if (!results.length) {
-    throw new Error('No QR code detected in the selected image.')
+  const jsQrValue = await detectWithJsQr(file)
+  if (jsQrValue) {
+    return jsQrValue
   }
 
-  return results[0].rawValue || ''
+  throw new Error('No QR code detected in the selected image. Try a clearer photo with the QR fully visible.')
 }
 
 function GuardPatrol() {
