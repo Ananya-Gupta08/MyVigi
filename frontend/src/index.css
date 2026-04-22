@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+:root {
+  --brand-olive: #546b41;
+  --brand-sage: #99ad7a;
+  --brand-sand: #dcccac;
+  --brand-cream: #fff8ec;
+  --brand-ink: #2f3b22;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -12,6 +20,16 @@ body,
 }
 
 body {
-  font-family: system-ui, sans-serif;
-  color: #111827;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--brand-ink);
+  background:
+    radial-gradient(circle at top, rgba(220, 204, 172, 0.45), transparent 32%),
+    linear-gradient(180deg, var(--brand-cream) 0%, #f8f1e3 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }

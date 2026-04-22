@@ -1,14 +1,39 @@
 import { useEffect, useState } from 'react'
 
+const normalizeScanValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '')
+
+async function detectQrFromFile(file) {
+  if (!file) {
+    return ''
+  }
+
+  if (typeof window === 'undefined' || typeof window.BarcodeDetector === 'undefined') {
+    throw new Error('QR detection is not supported in this browser. Use Chrome on mobile or enter the QR value manually.')
+  }
+
+  const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
+  const bitmap = await createImageBitmap(file)
+  const results = await detector.detect(bitmap)
+  bitmap.close()
+
+  if (!results.length) {
+    throw new Error('No QR code detected in the selected image.')
+  }
+
+  return results[0].rawValue || ''
+}
+
 function GuardPatrol() {
   const [route, setRoute] = useState([])
   const [selectedCheckpoint, setSelectedCheckpoint] = useState(null)
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [scanMode, setScanMode] = useState('')
-  const [scanFile, setScanFile] = useState(null)
+  const [scanFileName, setScanFileName] = useState('')
   const [scanText, setScanText] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [routeLoading, setRouteLoading] = useState(false)
+  const [guardName, setGuardName] = useState(localStorage.getItem('userName') || 'Guard')
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token')
@@ -47,22 +72,16 @@ function GuardPatrol() {
     return data
   }
 
-  const parseScanResult = (value) => {
-    if (!value) return ''
-    const normalized = value.toLowerCase().trim()
-    const orderMatch = normalized.match(/p(\d+)/) || normalized.match(/checkpoint\s*(\d+)/) || normalized.match(/(\d+)/)
-    if (orderMatch) {
-      return `p${orderMatch[1]}`
-    }
-    return normalized
-  }
-
   const loadRoute = async () => {
+    setRouteLoading(true)
     try {
       const data = await apiGet('/api/patrol/route')
       setRoute(data.route || [])
+      setGuardName(data.guard?.username || localStorage.getItem('userName') || 'Guard')
     } catch (error) {
       setStatusMessage(error?.message || 'Could not load patrol route')
+    } finally {
+      setRouteLoading(false)
     }
   }
 
@@ -71,10 +90,15 @@ function GuardPatrol() {
   }, [])
 
   const openScanModal = (checkpoint) => {
+    if (!checkpoint.canScan && checkpoint.status !== 'completed') {
+      setStatusMessage(`Checkpoint ${checkpoint.order} is locked. Scan the next pending circle first.`)
+      return
+    }
+
     setSelectedCheckpoint(checkpoint)
     setScanModalOpen(true)
     setScanMode('')
-    setScanFile(null)
+    setScanFileName('')
     setScanText('')
     setStatusMessage('')
   }
@@ -83,19 +107,28 @@ function GuardPatrol() {
     setScanModalOpen(false)
     setSelectedCheckpoint(null)
     setScanMode('')
-    setScanFile(null)
+    setScanFileName('')
     setScanText('')
-    setStatusMessage('')
   }
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event, mode) => {
     const file = event.target.files?.[0]
     if (!file) {
       return
     }
-    setScanFile(file)
-    const detected = parseScanResult(file.name)
-    setScanText(detected)
+
+    setScanMode(mode)
+    setScanFileName(file.name)
+    setStatusMessage('Detecting QR code...')
+
+    try {
+      const detectedValue = await detectQrFromFile(file)
+      setScanText(detectedValue)
+      setStatusMessage(`QR detected: ${detectedValue}`)
+    } catch (error) {
+      setScanText('')
+      setStatusMessage(error?.message || 'Unable to detect QR code from the selected image.')
+    }
   }
 
   const handleScanSubmit = async () => {
@@ -104,20 +137,20 @@ function GuardPatrol() {
       return
     }
 
-    const effectiveText = scanText || (scanFile ? parseScanResult(scanFile.name) : '')
+    const effectiveText = normalizeScanValue(scanText)
     if (!effectiveText) {
-      setStatusMessage('Please upload an image or enter the scanned QR text.')
+      setStatusMessage('Please scan with camera, upload an image, or enter the QR value manually.')
       return
     }
 
-    const expectedCheckpointIds = [
-      selectedCheckpoint.checkpointId.toLowerCase(),
+    const expectedValues = [
+      selectedCheckpoint.checkpointId,
       `p${selectedCheckpoint.order}`,
       `checkpoint${selectedCheckpoint.order}`,
-    ]
+    ].map(normalizeScanValue)
 
-    if (!expectedCheckpointIds.includes(effectiveText.toLowerCase())) {
-      setStatusMessage(`Scanned value does not match expected checkpoint for circle ${selectedCheckpoint.order}.`)
+    if (!expectedValues.includes(effectiveText)) {
+      setStatusMessage(`Detected QR value does not match circle ${selectedCheckpoint.order}.`)
       return
     }
 
@@ -125,10 +158,15 @@ function GuardPatrol() {
     try {
       const data = await apiPost('/api/patrol/scan', {
         checkpointId: selectedCheckpoint.checkpointId,
+        scannedValue: scanText,
       })
-      setStatusMessage(data.message || `Checkpoint ${selectedCheckpoint.checkpointId} scanned successfully.`)
+      setStatusMessage(
+        data.message || `Circle ${selectedCheckpoint.order} checkpoint completed at ${new Date().toLocaleTimeString()}.`
+      )
       await loadRoute()
-      setTimeout(closeScanModal, 1200)
+      setTimeout(() => {
+        closeScanModal()
+      }, 1200)
     } catch (error) {
       setStatusMessage(error?.message || 'Failed to process scan. Please try again.')
     } finally {
@@ -140,13 +178,15 @@ function GuardPatrol() {
     window.location.href = '/guard-dashboard'
   }
 
+  const nextPendingCheckpoint = route.find((checkpoint) => checkpoint.canScan) || null
+
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="bg-white shadow-md">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Patrol Route</h1>
-            <p className="text-sm text-slate-500">Scan your assigned checkpoints in order.</p>
+            <p className="text-sm text-slate-500">Assigned route for {guardName}</p>
           </div>
           <button
             onClick={handleBack}
@@ -161,27 +201,57 @@ function GuardPatrol() {
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="rounded-3xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
             <h2 className="text-xl font-semibold text-slate-900">Assigned Patrol Route</h2>
-            <p className="mt-2 text-sm text-slate-600">Tap the next checkpoint circle to scan with camera or upload from your device.</p>
+            <p className="mt-2 text-sm text-slate-600">
+              Click the next patrol circle to scan. Each completed checkpoint is filled automatically with completion time.
+            </p>
+
+            {nextPendingCheckpoint && (
+              <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                Next checkpoint to scan: {nextPendingCheckpoint.checkpointId} at {nextPendingCheckpoint.location}
+              </div>
+            )}
+
+            {statusMessage && !scanModalOpen && (
+              <div className="mt-4 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">{statusMessage}</div>
+            )}
+
             <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
-              {route.map((checkpoint) => (
-                <button
-                  key={checkpoint.checkpointId}
-                  type="button"
-                  onClick={() => openScanModal(checkpoint)}
-                  disabled={checkpoint.status === 'completed'}
-                  className={`group flex flex-col items-center justify-center rounded-3xl border p-5 text-center transition hover:-translate-y-0.5 hover:ring-2 hover:ring-sky-200 ${
-                    checkpoint.status === 'completed'
-                      ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-                      : 'border-slate-200 bg-white text-slate-900'
-                  } ${checkpoint.status !== 'completed' ? 'cursor-pointer' : 'cursor-default'}`}
-                >
-                  <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-lg font-bold text-slate-900 shadow-sm">
-                    {checkpoint.order}
-                  </div>
-                  <span className="text-sm font-semibold">{checkpoint.checkpointId}</span>
-                  <span className="mt-1 text-xs text-slate-500">{checkpoint.status === 'completed' ? 'Completed' : 'Pending'}</span>
-                </button>
-              ))}
+              {route.map((checkpoint) => {
+                const isCompleted = checkpoint.status === 'completed'
+                const isActive = checkpoint.canScan
+
+                return (
+                  <button
+                    key={checkpoint.checkpointId}
+                    type="button"
+                    onClick={() => openScanModal(checkpoint)}
+                    disabled={!isCompleted && !isActive}
+                    className={`group flex flex-col items-center justify-center rounded-3xl border p-5 text-center transition ${
+                      isCompleted
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                        : isActive
+                        ? 'border-sky-300 bg-sky-50 text-slate-900 hover:-translate-y-0.5 hover:ring-2 hover:ring-sky-200'
+                        : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    <div
+                      className={`mb-2 flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold shadow-sm ${
+                        isCompleted
+                          ? 'bg-emerald-600 text-white'
+                          : isActive
+                          ? 'bg-sky-600 text-white'
+                          : 'bg-white text-slate-400'
+                      }`}
+                    >
+                      {checkpoint.order}
+                    </div>
+                    <span className="text-sm font-semibold">{checkpoint.checkpointId}</span>
+                    <span className="mt-1 text-xs">
+                      {isCompleted ? 'Completed' : isActive ? 'Ready to scan' : 'Locked'}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -195,14 +265,21 @@ function GuardPatrol() {
                     <p className="text-xs text-slate-500">{checkpoint.location}</p>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-semibold ${checkpoint.status === 'completed' ? 'text-emerald-700' : 'text-slate-600'}`}>{checkpoint.status}</p>
-                    {checkpoint.completedAt && (
-                      <p className="text-xs text-slate-500">{new Date(checkpoint.completedAt).toLocaleString()}</p>
+                    <p className={`text-sm font-semibold ${checkpoint.status === 'completed' ? 'text-emerald-700' : checkpoint.canScan ? 'text-sky-700' : 'text-slate-500'}`}>
+                      {checkpoint.status === 'completed' ? 'Completed' : checkpoint.canScan ? 'Next to scan' : 'Waiting'}
+                    </p>
+                    {checkpoint.completedAt ? (
+                      <p className="text-xs text-slate-500">
+                        {new Date(checkpoint.completedAt).toLocaleString()} by {checkpoint.completedBy}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500">Pending for {guardName}</p>
                     )}
                   </div>
                 </div>
               ))}
             </div>
+            {routeLoading && <p className="mt-4 text-sm text-slate-500">Refreshing route...</p>}
           </div>
         </div>
       </main>
@@ -213,7 +290,9 @@ function GuardPatrol() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-2xl font-bold text-slate-900">Scan checkpoint {selectedCheckpoint.order}</h3>
-                <p className="mt-2 text-sm text-slate-600">Use camera or upload from device to confirm your patrol.</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Detect the QR for {selectedCheckpoint.checkpointId}. If the QR contains `P{selectedCheckpoint.order}`, this circle will be marked completed.
+                </p>
               </div>
               <button
                 type="button"
@@ -227,7 +306,7 @@ function GuardPatrol() {
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
                 <h4 className="font-semibold text-slate-900">Scan with camera</h4>
-                <p className="mt-2 text-sm text-slate-600">Take a photo of the QR code with your phone camera.</p>
+                <p className="mt-2 text-sm text-slate-600">Open the device camera and capture the checkpoint QR.</p>
                 <label className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-700">
                   Choose camera
                   <input
@@ -235,33 +314,31 @@ function GuardPatrol() {
                     accept="image/*"
                     capture="environment"
                     className="hidden"
-                    onChange={(e) => {
-                      setScanMode('camera')
-                      handleFileChange(e)
-                    }}
+                    onChange={(event) => handleFileChange(event, 'camera')}
                   />
                 </label>
               </div>
 
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
                 <h4 className="font-semibold text-slate-900">Upload from device</h4>
-                <p className="mt-2 text-sm text-slate-600">Choose a QR snapshot or device photo file.</p>
+                <p className="mt-2 text-sm text-slate-600">Choose a QR image from this device and detect it automatically.</p>
                 <label className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800">
                   Upload file
                   <input
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={(e) => {
-                      setScanMode('upload')
-                      handleFileChange(e)
-                    }}
+                    onChange={(event) => handleFileChange(event, 'upload')}
                   />
                 </label>
               </div>
             </div>
 
             <div className="mt-8 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                Selected mode: {scanMode || 'Not selected'} {scanFileName ? `• ${scanFileName}` : ''}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-slate-700">Detected QR value</label>
                 <input
@@ -269,7 +346,7 @@ function GuardPatrol() {
                   value={scanText}
                   onChange={(e) => setScanText(e.target.value)}
                   className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-                  placeholder="Type or confirm the scanned QR payload"
+                  placeholder="QR payload will appear here"
                 />
               </div>
 
@@ -291,7 +368,7 @@ function GuardPatrol() {
                   disabled={loading}
                   className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  {loading ? 'Scanning...' : `Scan checkpoint ${selectedCheckpoint.order}`}
+                  {loading ? 'Scanning...' : `Complete circle ${selectedCheckpoint.order}`}
                 </button>
               </div>
             </div>
