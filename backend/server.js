@@ -11,13 +11,16 @@ const app = express()
 const server = http.createServer(app)
 const io = socketIo(server, {
   cors: {
-    origin: '*',
+    origin: 'https://my-vigi.vercel.app',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   },
 })
 const PORT = process.env.PORT || 4444
 
-app.use(cors())
+app.use(cors({
+  origin: 'https://my-vigi.vercel.app',
+  credentials: true
+}))
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ limit: '50mb', extended: false }))
 
