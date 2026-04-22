@@ -49,14 +49,8 @@ const createSOS = async (req, res) => {
 }
 
 const getSOS = async (req, res) => {
-  const adminRole = req.userRole
-
-  if (adminRole !== 'admin') {
-    return res.status(403).json({ message: 'Admin access required' })
-  }
-
   try {
-    const alerts = await SOSAlert.find()
+    const alerts = await SOSAlert.find(req.userRole === 'admin' ? {} : { status: 'active' })
       .populate('guardId', 'username email')
       .populate('resolvedBy', 'username')
       .sort('-createdAt')

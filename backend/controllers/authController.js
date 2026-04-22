@@ -1,8 +1,17 @@
 const jwt = require('jsonwebtoken')
 const User = require('../models/User')
 
+const buildUserResponse = (user) => ({
+  id: user._id,
+  username: user.username,
+  email: user.email,
+  role: user.role,
+  profilePhoto: user.profilePhoto || '',
+  assignedCheckpointIds: user.assignedCheckpointIds || [],
+})
+
 const signup = async (req, res) => {
-  const { username, email, password, role, profilePhoto } = req.body
+  const { username, email, password, role, profilePhoto, assignedCheckpointIds } = req.body
 
   if (!username || !email || !password) {
     return res.status(400).json({ message: 'All fields are required' })
@@ -20,6 +29,7 @@ const signup = async (req, res) => {
       password,
       role: role || 'guard',
       profilePhoto: profilePhoto || '',
+      assignedCheckpointIds: Array.isArray(assignedCheckpointIds) ? assignedCheckpointIds : [],
     })
     await user.save()
 
@@ -32,13 +42,7 @@ const signup = async (req, res) => {
     res.status(201).json({
       message: 'Signup successful',
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        profilePhoto: user.profilePhoto || '',
-      },
+      user: buildUserResponse(user),
     })
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -46,7 +50,7 @@ const signup = async (req, res) => {
 }
 
 const login = async (req, res) => {
-  const { username, password } = req.body
+  const { username, password, profilePhoto } = req.body
 
   if (!username || !password) {
     return res.status(400).json({ message: 'Username and password required' })
@@ -63,6 +67,11 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
 
+    if (typeof profilePhoto === 'string' && profilePhoto.trim()) {
+      user.profilePhoto = profilePhoto
+      await user.save()
+    }
+
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET || 'secret_key_change_me',
@@ -72,13 +81,7 @@ const login = async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        profilePhoto: user.profilePhoto || '',
-      },
+      user: buildUserResponse(user),
     })
   } catch (err) {
     res.status(500).json({ message: err.message })
