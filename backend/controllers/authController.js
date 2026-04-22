@@ -35,7 +35,7 @@ const signup = async (req, res) => {
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
-      process.env.JWT_SECRET || 'secret_key_change_me',
+      process.env.JWT_SECRET ,
       { expiresIn: '24h' }
     )
 
@@ -74,7 +74,7 @@ const login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
-      process.env.JWT_SECRET || 'secret_key_change_me',
+      process.env.JWT_SECRET ,
       { expiresIn: '24h' }
     )
 

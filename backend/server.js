@@ -12,7 +12,7 @@ const server = http.createServer(app)
 const io = socketIo(server, {
   cors: {
     origin: '*',
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   },
 })
 const PORT = process.env.PORT || 4444
