@@ -1,87 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import jsQR from 'jsqr'
+import QrScanner from 'qr-scanner'
 import { buildApiUrl } from '../lib/api'
 
 const normalizeScanValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '')
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = () => reject(new Error('Could not read the selected image file.'))
-    reader.readAsDataURL(file)
-  })
-}
-
-async function loadImageElement(file) {
-  const dataUrl = await readFileAsDataUrl(file)
-
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('Could not load the selected image.'))
-    image.src = dataUrl
-  })
-}
-
-async function detectWithBarcodeDetector(file) {
-  if (typeof window === 'undefined' || typeof window.BarcodeDetector === 'undefined') {
-    return ''
-  }
-
-  const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
-  const bitmap = await createImageBitmap(file)
-
-  try {
-    const results = await detector.detect(bitmap)
-    return results[0]?.rawValue || ''
-  } finally {
-    bitmap.close()
-  }
-}
-
-async function detectWithJsQr(file) {
-  const image = await loadImageElement(file)
-  const canvas = document.createElement('canvas')
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-
-  if (!context) {
-    throw new Error('Could not read image pixels for QR detection.')
-  }
-
-  canvas.width = image.naturalWidth || image.width
-  canvas.height = image.naturalHeight || image.height
-  context.drawImage(image, 0, 0, canvas.width, canvas.height)
-
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-  const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
-    inversionAttempts: 'attemptBoth',
-  })
-
-  return qrCode?.data || ''
-}
 
 async function detectQrFromFile(file) {
   if (!file) {
     return ''
   }
 
-  const barcodeValue = await detectWithBarcodeDetector(file)
-  if (barcodeValue) {
-    return barcodeValue
-  }
+  const result = await QrScanner.scanImage(file, {
+    returnDetailedScanResult: true,
+  })
 
-  const jsQrValue = await detectWithJsQr(file)
-  if (jsQrValue) {
-    return jsQrValue
-  }
-
-  throw new Error('No QR code detected in the selected image. Try a clearer photo with the QR fully visible.')
+  return result?.data || ''
 }
 
 function GuardPatrol() {
   const navigate = useNavigate()
+  const videoRef = useRef(null)
+  const scannerRef = useRef(null)
+  const restartTimerRef = useRef(null)
+  const submittingScanRef = useRef(false)
   const [route, setRoute] = useState([])
   const [selectedCheckpoint, setSelectedCheckpoint] = useState(null)
   const [scanModalOpen, setScanModalOpen] = useState(false)
@@ -92,6 +33,7 @@ function GuardPatrol() {
   const [loading, setLoading] = useState(false)
   const [routeLoading, setRouteLoading] = useState(false)
   const [guardName, setGuardName] = useState(localStorage.getItem('userName') || 'Guard')
+  const [cameraReady, setCameraReady] = useState(false)
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token')
@@ -143,25 +85,29 @@ function GuardPatrol() {
     }
   }
 
+  const stopScanner = () => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current)
+      restartTimerRef.current = null
+    }
+
+    if (scannerRef.current) {
+      scannerRef.current.stop()
+      scannerRef.current.destroy()
+      scannerRef.current = null
+    }
+
+    setCameraReady(false)
+  }
+
   useEffect(() => {
     loadRoute()
   }, [])
 
-  const openScanModal = (checkpoint) => {
-    if (!checkpoint.canScan && checkpoint.status !== 'completed') {
-      setStatusMessage(`Checkpoint ${checkpoint.order} is locked. Scan the next pending circle first.`)
-      return
-    }
-
-    setSelectedCheckpoint(checkpoint)
-    setScanModalOpen(true)
-    setScanMode('')
-    setScanFileName('')
-    setScanText('')
-    setStatusMessage('')
-  }
+  useEffect(() => () => stopScanner(), [])
 
   const closeScanModal = () => {
+    stopScanner()
     setScanModalOpen(false)
     setSelectedCheckpoint(null)
     setScanMode('')
@@ -169,33 +115,13 @@ function GuardPatrol() {
     setScanText('')
   }
 
-  const handleFileChange = async (event, mode) => {
-    const file = event.target.files?.[0]
-    if (!file) {
-      return
-    }
-
-    setScanMode(mode)
-    setScanFileName(file.name)
-    setStatusMessage('Detecting QR code...')
-
-    try {
-      const detectedValue = await detectQrFromFile(file)
-      setScanText(detectedValue)
-      setStatusMessage(`QR detected: ${detectedValue}`)
-    } catch (error) {
-      setScanText('')
-      setStatusMessage(error?.message || 'Unable to detect QR code from the selected image.')
-    }
-  }
-
-  const handleScanSubmit = async () => {
+  const submitDetectedValue = async (rawValue) => {
     if (!selectedCheckpoint) {
       setStatusMessage('Select a checkpoint to scan.')
       return
     }
 
-    const effectiveText = normalizeScanValue(scanText)
+    const effectiveText = normalizeScanValue(rawValue)
     if (!effectiveText) {
       setStatusMessage('Please scan with camera, upload an image, or enter the QR value manually.')
       return
@@ -213,10 +139,12 @@ function GuardPatrol() {
     }
 
     setLoading(true)
+    submittingScanRef.current = true
+
     try {
       const data = await apiPost('/api/patrol/scan', {
         checkpointId: selectedCheckpoint.checkpointId,
-        scannedValue: scanText,
+        scannedValue: rawValue,
       })
       setStatusMessage(
         data.message || `Circle ${selectedCheckpoint.order} checkpoint completed at ${new Date().toLocaleTimeString()}.`
@@ -229,7 +157,134 @@ function GuardPatrol() {
       setStatusMessage(error?.message || 'Failed to process scan. Please try again.')
     } finally {
       setLoading(false)
+      submittingScanRef.current = false
     }
+  }
+
+  useEffect(() => {
+    if (!scanModalOpen || !selectedCheckpoint || !videoRef.current) {
+      return
+    }
+
+    let cancelled = false
+
+    const startScanner = async () => {
+      stopScanner()
+      setScanMode('camera')
+      setScanFileName('Live camera')
+      setStatusMessage('Starting camera...')
+
+      try {
+        const hasCamera = await QrScanner.hasCamera()
+        if (cancelled) {
+          return
+        }
+
+        if (!hasCamera) {
+          setStatusMessage('No camera available on this device. Upload a QR image or enter the value manually.')
+          return
+        }
+
+        const scanner = new QrScanner(
+          videoRef.current,
+          async (result) => {
+            const detectedValue = result?.data || ''
+            if (!detectedValue || submittingScanRef.current) {
+              return
+            }
+
+            stopScanner()
+            setScanText(detectedValue)
+            setStatusMessage(`QR detected: ${detectedValue}`)
+            await submitDetectedValue(detectedValue)
+          },
+          {
+            preferredCamera: 'environment',
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            maxScansPerSecond: 12,
+            returnDetailedScanResult: true,
+            onDecodeError: () => {},
+          }
+        )
+
+        scannerRef.current = scanner
+        await scanner.start()
+
+        if (cancelled) {
+          stopScanner()
+          return
+        }
+
+        setCameraReady(true)
+        setStatusMessage('Point the camera at the checkpoint QR code.')
+      } catch (error) {
+        stopScanner()
+        setStatusMessage(error?.message || 'Could not start the camera scanner. Check camera permission and HTTPS.')
+      }
+    }
+
+    startScanner()
+
+    return () => {
+      cancelled = true
+      stopScanner()
+    }
+  }, [scanModalOpen, selectedCheckpoint])
+
+  const openScanModal = (checkpoint) => {
+    if (!checkpoint.canScan && checkpoint.status !== 'completed') {
+      setStatusMessage(`Checkpoint ${checkpoint.order} is locked. Scan the next pending circle first.`)
+      return
+    }
+
+    setSelectedCheckpoint(checkpoint)
+    setScanModalOpen(true)
+    setScanMode('camera')
+    setScanFileName('Live camera')
+    setScanText('')
+    setStatusMessage('')
+  }
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    stopScanner()
+    setScanMode('upload')
+    setScanFileName(file.name)
+    setStatusMessage('Detecting QR code from image...')
+
+    try {
+      const detectedValue = await detectQrFromFile(file)
+      setScanText(detectedValue)
+      setStatusMessage(`QR detected: ${detectedValue}`)
+      await submitDetectedValue(detectedValue)
+    } catch (error) {
+      setScanText('')
+      setStatusMessage(error?.message || 'Unable to detect QR code from the selected image.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const handleScanSubmit = async () => {
+    await submitDetectedValue(scanText)
+  }
+
+  const restartCamera = () => {
+    stopScanner()
+    setCameraReady(false)
+    setScanMode('camera')
+    setScanFileName('Live camera')
+    setStatusMessage('Restarting camera...')
+    restartTimerRef.current = setTimeout(() => {
+      setStatusMessage('')
+      setScanModalOpen(false)
+      requestAnimationFrame(() => setScanModalOpen(true))
+    }, 0)
   }
 
   const handleBack = () => {
@@ -349,7 +404,7 @@ function GuardPatrol() {
               <div>
                 <h3 className="text-2xl font-bold text-slate-900">Scan checkpoint {selectedCheckpoint.order}</h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  Detect the QR for {selectedCheckpoint.checkpointId}. If the QR contains `P{selectedCheckpoint.order}`, this circle will be marked completed.
+                  The live camera scanner starts automatically. This checkpoint accepts {selectedCheckpoint.checkpointId}, P{selectedCheckpoint.order}, or checkpoint{selectedCheckpoint.order}.
                 </p>
               </div>
               <button
@@ -363,38 +418,44 @@ function GuardPatrol() {
 
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-                <h4 className="font-semibold text-slate-900">Scan with camera</h4>
-                <p className="mt-2 text-sm text-slate-600">Open the device camera and capture the checkpoint QR.</p>
-                <label className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-700">
-                  Choose camera
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={(event) => handleFileChange(event, 'camera')}
-                  />
-                </label>
+                <h4 className="font-semibold text-slate-900">Live camera</h4>
+                <p className="mt-2 text-sm text-slate-600">Allow camera access, then point the rear camera at the QR code.</p>
+                <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-slate-900">
+                  <video ref={videoRef} className="aspect-[4/3] w-full object-cover" muted playsInline />
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={restartCamera}
+                    className="rounded-2xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-700"
+                  >
+                    {cameraReady ? 'Restart camera' : 'Start camera again'}
+                  </button>
+                  <div className="rounded-2xl bg-slate-200 px-4 py-3 text-sm text-slate-700">
+                    {cameraReady ? 'Camera is live' : 'Waiting for camera access'}
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
                 <h4 className="font-semibold text-slate-900">Upload from device</h4>
-                <p className="mt-2 text-sm text-slate-600">Choose a QR image from this device and detect it automatically.</p>
+                <p className="mt-2 text-sm text-slate-600">Use this if camera access is blocked or the QR is easier to scan from a saved image.</p>
                 <label className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800">
                   Upload file
                   <input
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={(event) => handleFileChange(event, 'upload')}
+                    onChange={handleFileChange}
                   />
                 </label>
+                <p className="mt-4 text-sm text-slate-600">You can also paste or type the detected QR value manually below if needed.</p>
               </div>
             </div>
 
             <div className="mt-8 space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                Selected mode: {scanMode || 'Not selected'} {scanFileName ? `• ${scanFileName}` : ''}
+                Selected mode: {scanMode || 'Not selected'} {scanFileName ? `| ${scanFileName}` : ''}
               </div>
 
               <div>
